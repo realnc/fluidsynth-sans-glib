@@ -88,6 +88,27 @@ static void *fluid_log_user_data[LAST_LOG_LEVEL] = { NULL };
 
 static const char fluid_libname[] = "fluidsynth";
 
+int _snprintf_c(char *str, size_t size, const char *format, ...)
+{
+	va_list args;
+    va_start(args, format);
+    int ret=vsnprintf(str, size, format, args);
+    va_end(args);
+    int r=ret;
+    if(r>=size)r=size-1;
+    str[r]='\0';
+    return ret;
+}
+
+int _vsnprintf_c(char *str, size_t size, const char *format, va_list ap)
+{
+	int ret=vsnprintf(str, size, format, ap);
+    int r=ret;
+    if(r>=size)r=size-1;
+    str[r]='\0';
+    return ret;
+}
+
 /**
  * Installs a new log function for a specified log level.
  * @param level Log level to install handler for.
