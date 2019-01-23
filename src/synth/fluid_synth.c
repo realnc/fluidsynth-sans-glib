@@ -601,7 +601,8 @@ new_fluid_synth(fluid_settings_t *settings)
     int with_ladspa = 0;
 
     /* initialize all the conversion tables and other stuff */
-    if(fluid_atomic_int_compare_and_exchange(&fluid_synth_initialized, 0, 1))
+    int t=0;
+    if(fluid_atomic_int_compare_and_exchange(&fluid_synth_initialized, &t, 1))
     {
         fluid_synth_init();
     }

@@ -280,7 +280,7 @@ fluid_error()
  */
 void fluid_msleep(unsigned int msecs)
 {
-    g_usleep(msecs * 1000);
+    _thread_sleep(msecs * 1000);
 }
 
 /**
@@ -289,18 +289,24 @@ void fluid_msleep(unsigned int msecs)
  */
 unsigned int fluid_curtime(void)
 {
-    static glong initial_seconds = 0;
-    GTimeVal timeval;
+#ifdef WIN32
+	long long f,t;
+	QueryPerformanceFrequency(&f);
+	QueryPerformanceCounter(&t);
+	return t*1000/f;
+#else
+	static long initial_seconds = 0;
+	struct timespec timeval;
 
-    if(initial_seconds == 0)
-    {
-        g_get_current_time(&timeval);
-        initial_seconds = timeval.tv_sec;
-    }
+	if (initial_seconds == 0) {
+		timespec_get (&timeval, TIME_UTC);
+		initial_seconds = timeval.tv_sec;
+	}
 
-    g_get_current_time(&timeval);
+	timespec_get (&timeval, TIME_UTC);
 
-    return (unsigned int)((timeval.tv_sec - initial_seconds) * 1000.0 + timeval.tv_usec / 1000.0);
+	return (unsigned int)((timeval.tv_sec - initial_seconds) * 1000.0 + timeval.tv_nsec / 1000000.0);
+#endif
 }
 
 /**
@@ -314,40 +320,18 @@ unsigned int fluid_curtime(void)
 double
 fluid_utime(void)
 {
-    double utime;
-
-#if GLIB_MAJOR_VERSION == 2 && GLIB_MINOR_VERSION >= 28
-    /* use high precision monotonic clock if available (g_monotonic_time().
-     * For Winfdows, if this clock is actually implemented as low prec. clock
-     * (i.e. in case glib is too old), high precision performance counter are
-     * used instead.
-     * see: https://bugzilla.gnome.org/show_bug.cgi?id=783340
-     */
-#if defined(WITH_PROFILING) &&  defined(WIN32) &&\
-	/* glib < 2.53.3 */\
-	(GLIB_MINOR_VERSION <= 53 && (GLIB_MINOR_VERSION < 53 || GLIB_MICRO_VERSION < 3))
-    /* use high precision performance counter. */
-    static LARGE_INTEGER freq_cache = {0, 0};	/* Performance Frequency */
-    LARGE_INTEGER perf_cpt;
-
-    if(! freq_cache.QuadPart)
-    {
-        QueryPerformanceFrequency(&freq_cache);  /* Frequency value */
-    }
-
-    QueryPerformanceCounter(&perf_cpt); /* Counter value */
-    utime = perf_cpt.QuadPart * 1000000.0 / freq_cache.QuadPart; /* time in micros */
+#ifdef WIN32
+	long long f,t;
+	QueryPerformanceFrequency(&f);
+	QueryPerformanceCounter(&t);
+	return t*1000000/f;
 #else
-    utime = g_get_monotonic_time();
-#endif
-#else
-    /* fallback to less precise clock */
-    GTimeVal timeval;
-    g_get_current_time(&timeval);
-    utime = (timeval.tv_sec * 1000000.0 + timeval.tv_usec);
-#endif
+	struct timespec timeval;
 
-    return utime;
+	timespec_get (&timeval, TIME_UTC);
+
+	return (timeval.tv_sec * 1000000.0 + timeval.tv_nsec/1000.);
+#endif
 }
 
 
@@ -896,7 +880,7 @@ void fluid_profile_start_stop(unsigned int end_ticks, short clear_data)
  *
  */
 
-#if OLD_GLIB_THREAD_API
+#if 0
 
 /* Rather than inline this one, we just declare it as a function, to prevent
  * GCC warning about inline failure. */
@@ -913,8 +897,8 @@ new_fluid_cond(void)
 
 #endif
 
-static gpointer
-fluid_thread_high_prio(gpointer data)
+static int
+fluid_thread_high_prio(void* data)
 {
     fluid_thread_info_t *info = data;
 
@@ -936,78 +920,38 @@ fluid_thread_high_prio(gpointer data)
  * @return New thread pointer or NULL on error
  */
 fluid_thread_t *
-new_fluid_thread(const char *name, fluid_thread_func_t func, void *data, int prio_level, int detach)
+new_fluid_thread (const char *name, fluid_thread_func_t func, void *data, int prio_level, int detach)
 {
-    GThread *thread;
-    fluid_thread_info_t *info;
-    GError *err = NULL;
+	_thread *thread=FLUID_NEW(_thread);
+	fluid_thread_info_t *info;
 
-    g_return_val_if_fail(func != NULL, NULL);
+	fluid_return_val_if_fail (func != NULL, NULL);
+	if (prio_level > 0)
+	{
+		info = FLUID_NEW (fluid_thread_info_t);
 
-#if OLD_GLIB_THREAD_API
+		if (!info)
+		{
+			FLUID_LOG(FLUID_ERR, "Out of memory");
+			return NULL;
+		}
 
-    /* Make sure g_thread_init has been called.
-     * FIXME - Probably not a good idea in a shared library,
-     * but what can we do *and* remain backwards compatible? */
-    if(!g_thread_supported())
-    {
-        g_thread_init(NULL);
-    }
+		info->func = func;
+		info->data = data;
+		info->prio_level = prio_level;
+		_thread_create (thread, fluid_thread_high_prio, info);
+	}
+	else _thread_create (thread, func, data);
 
-#endif
+	/*if (ret != thrd_success)
+	{
+		FLUID_LOG(FLUID_ERR, "Failed to create the thread.");
+		return NULL;
+	}*/
 
-    if(prio_level > 0)
-    {
-        info = FLUID_NEW(fluid_thread_info_t);
+	if (detach) _thread_detach (thread);  // Release thread reference, if caller wants to detach
 
-        if(!info)
-        {
-            FLUID_LOG(FLUID_ERR, "Out of memory");
-            return NULL;
-        }
-
-        info->func = func;
-        info->data = data;
-        info->prio_level = prio_level;
-#if NEW_GLIB_THREAD_API
-        thread = g_thread_try_new(name, fluid_thread_high_prio, info, &err);
-#else
-        thread = g_thread_create(fluid_thread_high_prio, info, detach == FALSE, &err);
-#endif
-    }
-
-#if NEW_GLIB_THREAD_API
-    else
-    {
-        thread = g_thread_try_new(name, (GThreadFunc)func, data, &err);
-    }
-
-#else
-    else
-    {
-        thread = g_thread_create((GThreadFunc)func, data, detach == FALSE, &err);
-    }
-
-#endif
-
-    if(!thread)
-    {
-        FLUID_LOG(FLUID_ERR, "Failed to create the thread: %s",
-                  fluid_gerror_message(err));
-        g_clear_error(&err);
-        return NULL;
-    }
-
-#if NEW_GLIB_THREAD_API
-
-    if(detach)
-    {
-        g_thread_unref(thread);    // Release thread reference, if caller wants to detach
-    }
-
-#endif
-
-    return thread;
+	return thread;
 }
 
 /**
@@ -1015,9 +959,9 @@ new_fluid_thread(const char *name, fluid_thread_func_t func, void *data, int pri
  * @param thread Thread to free
  */
 void
-delete_fluid_thread(fluid_thread_t *thread)
+delete_fluid_thread(fluid_thread_t* thread)
 {
-    /* Threads free themselves when they quit, nothing to do */
+	_thread_detach (thread);
 }
 
 /**
@@ -1026,11 +970,11 @@ delete_fluid_thread(fluid_thread_t *thread)
  * @return FLUID_OK
  */
 int
-fluid_thread_join(fluid_thread_t *thread)
+fluid_thread_join(fluid_thread_t* thread)
 {
-    g_thread_join(thread);
+	_thread_join (thread);
 
-    return FLUID_OK;
+	return FLUID_OK;
 }
 
 

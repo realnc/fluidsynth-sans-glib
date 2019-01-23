@@ -39,7 +39,7 @@ struct _fluid_mixer_buffers_t
     fluid_rvoice_mixer_t *mixer; /**< Owner of object */
 #if ENABLE_MIXER_THREADS
     fluid_thread_t *thread;     /**< Thread object */
-    fluid_atomic_int_t ready;   /**< Atomic: buffers are ready for mixing */
+    _Atomic fluid_atomic_int_t ready;   /**< Atomic: buffers are ready for mixing */
 #endif
 
     fluid_rvoice_t **finished_voices; /* List of voices who have finished */

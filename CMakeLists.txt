@@ -20,7 +20,7 @@
 # CMake based build system. Pedro Lopez-Cabanillas <plcl@users.sf.net>
 
 cmake_minimum_required ( VERSION 3.1.0 ) # because of CMAKE_C_STANDARD
-project ( FluidSynth C )
+project ( FluidSynth )
 set ( CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake_admin )
 
 # FluidSynth package name
@@ -55,6 +55,7 @@ option ( enable-fpe-check "enable Floating Point Exception checks and debug mess
 option ( enable-portaudio "compile PortAudio support" off )
 option ( enable-profiling "profile the dsp code" off )
 option ( enable-trap-on-fpe "enable SIGFPE trap on Floating Point Exceptions" off )
+option ( enable-ladspa "enable LADSPA effect units" off )
 
 # Options enabled by default
 option ( enable-aufile "compile support for sound file output" on )
@@ -62,7 +63,6 @@ option ( BUILD_SHARED_LIBS "Build a shared object or DLL" on )
 option ( enable-dbus "compile DBUS support (if it is available)" on )
 option ( enable-ipv6  "enable ipv6 support" on )
 option ( enable-jack "compile JACK support (if it is available)" on )
-option ( enable-ladspa "enable LADSPA effect units" on )
 option ( enable-libsndfile "compile libsndfile support (if it is available)" on )
 option ( enable-midishare "compile MidiShare support (if it is available)" on )
 option ( enable-network "enable network support (requires BSD sockets)" on )
@@ -138,6 +138,7 @@ check_include_file ( string.h HAVE_STRING_H )
 check_include_file ( stdlib.h HAVE_STDLIB_H )
 check_include_file ( stdio.h HAVE_STDIO_H )
 check_include_file ( math.h HAVE_MATH_H )
+check_include_file ( time.h HAVE_TIME_H )
 check_include_file ( errno.h HAVE_ERRNO_H )
 check_include_file ( stdarg.h HAVE_STDARG_H )
 check_include_file ( unistd.h HAVE_UNISTD_H )
@@ -157,6 +158,7 @@ check_include_file ( pthread.h HAVE_PTHREAD_H )
 check_include_file ( signal.h HAVE_SIGNAL_H )
 check_include_file ( getopt.h HAVE_GETOPT_H )
 check_include_file ( stdint.h HAVE_STDINT_H )
+check_include_file ( stdatomic.h HAVE_STDATOMIC_H )
 include ( TestInline )
 include ( TestVLA )
 include ( TestBigEndian )
@@ -178,6 +180,20 @@ if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_
   
   # define some warning flags
   set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -W -Wpointer-arith -Wcast-qual -Wstrict-prototypes -Wno-unused-parameter -Wdeclaration-after-statement" )
+  set ( GNUCXX_WARNING_FLAGS "-Wall -W -Wpointer-arith -Wno-cast-qual -Wcast-align -Wno-unused-parameter" )
+  set ( CMAKE_C_FLAGS_DEBUG "-D_XOPEN_SOURCE=500 -std=c11 -g -fvisibility=hidden -DDEBUG ${GNUCC_WARNING_FLAGS}" )
+  set ( CMAKE_C_FLAGS_RELEASE "-D_XOPEN_SOURCE=500 -std=c11 -O2 -fomit-frame-pointer -funroll-all-loops -finline-functions -fvisibility=hidden -DNDEBUG ${GNUCC_WARNING_FLAGS}" )
+  set ( CMAKE_C_FLAGS_RELWITHDEBINFO "-D _XOPEN_SOURCE=500  -std=c11 -O2 -g -fomit-frame-pointer -funroll-all-loops -finline-functions -fvisibility=hidden -DNDEBUG ${GNUCC_WARNING_FLAGS}" )
+  set ( CMAKE_CXX_FLAGS_DEBUG "-g -fvisibility=hidden -DDEBUG ${GNUCXX_WARNING_FLAGS}" )
+  set ( CMAKE_CXX_FLAGS_RELEASE "-O2 -fomit-frame-pointer -funroll-all-loops -finline-functions -fvisibility=hidden -DNDEBUG ${GNUCXX_WARNING_FLAGS}" )
+  set ( CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -fomit-frame-pointer -funroll-all-loops -finline-functions -fvisibility=hidden -DNDEBUG ${GNUCXX_WARNING_FLAGS}" )
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+  set(CMAKE_CXX_STANDARD 11)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CXX_EXTENSIONS OFF)
+  set(CMAKE_C_STANDARD 11)
+  set(CMAKE_C_STANDARD_REQUIRED ON)
+  set(CMAKE_C_EXTENSIONS OFF)
   
   if ( CMAKE_C_COMPILER_ID STREQUAL "Intel" )
     # icc needs the restrict flag to recognize C99 restrict pointers
@@ -260,6 +276,7 @@ if ( WIN32 )
   if ( MINGW )
     set ( MINGW32 1 )
     add_compile_options ( -mms-bitfields )
+    add_definitions ( -DWIN32 )
   endif  ( MINGW )
 else ( WIN32 )
 # Check PThreads, but not in Windows
@@ -440,30 +457,11 @@ endif(ASTYLE)
 
 if(NOT enable-pkgconfig)
 
-    FIND_LIBRARY( GLIB_LIB NAMES glib glib-2.0 PATH GLIB_LIBRARY_DIR )
-    FIND_LIBRARY( GTHREAD_LIB NAMES gthread gthread-2.0 PATH GTHREAD_LIBRARY_DIR )
-    FIND_PATH( GLIBH_DIR glib.h PATH GLIB_INCLUDE_DIR )
-    FIND_PATH( GLIBCONF_DIR glibconfig.h PATH GLIBCONF_INCLUDE_DIR )
-    
-    IF( GLIB_LIB MATCHES "GLIB_LIB-NOTFOUND" OR
-            GTHREAD_LIB MATCHES "GTHREAD_LIB-NOTFOUND" OR
-            GLIBH_DIR MATCHES "GLIBH_DIR-NOTFOUND" OR
-            GLIBCONF_DIR MATCHES "GLIBCONF_DIR-NOTFOUND")
-            message( WARNING "Not sure if I found GLIB, continuing anyway.")
-    ENDIF()
-    
-    SET( GLIB_INCLUDE_DIRS ${GLIBH_DIR} ${GLIBCONF_DIR} )
-    SET( GLIB_LIBRARIES ${GLIB_LIB} ${GTHREAD_LIB} )
-    
-    message( STATUS "GLIB_INCLUDE_DIRS: " ${GLIB_INCLUDE_DIRS} )
-    message( STATUS "GLIB_LIBRARIES: " ${GLIB_LIBRARIES} )
-
 else(NOT enable-pkgconfig)
 
     find_package ( PkgConfig REQUIRED )
 
-    # Mandatory libraries: glib and gthread
-    pkg_check_modules ( GLIB REQUIRED glib-2.0>=2.6.5 gthread-2.0>=2.6.5 )
+    pkg_check_modules ( LIBATOMIC atomic>=1.0.0 )
 
     include ( UnsetPkgConfig )
 

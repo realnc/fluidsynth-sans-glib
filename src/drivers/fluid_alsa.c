@@ -31,7 +31,7 @@
 #include "fluid_settings.h"
 
 #if ALSA_SUPPORT
-
+#define alloca __builtin_alloca //dunno why but I get undefined reference to alloca.
 #define ALSA_PCM_NEW_HW_PARAMS_API
 #include <alsa/asoundlib.h>
 #include <sys/poll.h>

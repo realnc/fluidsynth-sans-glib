@@ -37,7 +37,6 @@ include_directories (
 
 include_directories (
     SYSTEM
-    ${GLIB_INCLUDE_DIRS}
 )
 
 # ************ library ************
@@ -138,6 +137,8 @@ set ( libfluidsynth_SOURCES
     utils/fluidsynth_priv.h
     utils/fluid_sys.c
     utils/fluid_sys.h
+    utils/fluid_threading.cpp
+    utils/fluid_threading.h
     sfloader/fluid_defsfont.c
     sfloader/fluid_defsfont.h
     sfloader/fluid_sfont.h
@@ -319,7 +320,6 @@ else ( MACOSX_FRAMEWORK )
 endif ( MACOSX_FRAMEWORK )
 
 target_link_libraries ( libfluidsynth
-    ${GLIB_LIBRARIES}
     ${GMODULE_LIBRARIES}
     ${LASH_LIBRARIES}
     ${JACK_LIBRARIES}

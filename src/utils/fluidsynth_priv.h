@@ -22,8 +22,6 @@
 #ifndef _FLUIDSYNTH_PRIV_H
 #define _FLUIDSYNTH_PRIV_H
 
-#include <glib.h>
-
 #include "config.h"
 
 #if defined(__POWERPC__) && !(defined(__APPLE__) && defined(__MACH__))
@@ -44,6 +42,10 @@
 
 #if HAVE_MATH_H
 #include <math.h>
+#endif
+
+#if HAVE_TIME_H
+#include <time.h>
 #endif
 
 #if HAVE_ERRNO_H
@@ -109,6 +111,9 @@
 #if HAVE_IO_H
 #include <io.h> // _open(), _close(), read(), write() on windows
 #endif
+
+#include <stdatomic.h>
+#include "fluid_threading.h"
 
 #if HAVE_SIGNAL_H
 #include <signal.h>
@@ -268,6 +273,11 @@ do { strncpy(_dst,_src,_n); \
     (_dst)[(_n)-1]='\0'; \
 }while(0)
 
+#ifndef TRUE
+#define TRUE 1
+#define FALSE 0
+#endif
+
 #define FLUID_STRCHR(_s,_c)          strchr(_s,_c)
 #define FLUID_STRRCHR(_s,_c)         strrchr(_s,_c)
 
@@ -349,8 +359,13 @@ do { strncpy(_dst,_src,_n); \
 #define FLUID_ASSERT(a)
 #endif
 
-#define FLUID_LIKELY G_LIKELY
-#define FLUID_UNLIKELY G_UNLIKELY
+#ifdef __GNUC__
+#define FLUID_LIKELY(a) __builtin_expect((a),1)
+#define FLUID_UNLIKELY(a) __builtin_expect((a),0)
+#else
+#define FLUID_LIKELY
+#define FLUID_UNLIKELY
+#endif
 
 char *fluid_error(void);
 
