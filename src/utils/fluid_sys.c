@@ -88,7 +88,7 @@ static void *fluid_log_user_data[LAST_LOG_LEVEL] = { NULL };
 
 static const char fluid_libname[] = "fluidsynth";
 
-int _snprintf_c(char *str, size_t size, const char *format, ...)
+int _snprintf_c99(char *str, size_t size, const char *format, ...)
 {
 	va_list args;
     va_start(args, format);
@@ -100,7 +100,7 @@ int _snprintf_c(char *str, size_t size, const char *format, ...)
     return ret;
 }
 
-int _vsnprintf_c(char *str, size_t size, const char *format, va_list ap)
+int _vsnprintf_c99(char *str, size_t size, const char *format, va_list ap)
 {
 	int ret=vsnprintf(str, size, format, ap);
     int r=ret;

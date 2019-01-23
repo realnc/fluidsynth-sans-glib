@@ -295,13 +295,13 @@ do { strncpy(_dst,_src,_n); \
  * i.e. not microsofts non compliant extension _snprintf() as it doesnt
  * reliably null-terminates the buffer
  */
-#define FLUID_SNPRINTF           _snprintf_c
+#define FLUID_SNPRINTF           _snprintf_c99
 #else
 #define FLUID_SNPRINTF           snprintf
 #endif
 
 #if (defined(WIN32) && _MSC_VER < 1500) || defined(MINGW32)
-#define FLUID_VSNPRINTF          _vsnprintf_c
+#define FLUID_VSNPRINTF          _vsnprintf_c99
 #else
 #define FLUID_VSNPRINTF          vsnprintf
 #endif
