@@ -29,10 +29,17 @@
 #define GETOPT_SUPPORT 1
 #endif
 
+#ifdef LIBINSTPATCH_SUPPORT
+#include <libinstpatch/libinstpatch.h>
+#endif
 #include "fluid_lash.h"
 
 #ifdef SYSTEMD_SUPPORT
 #include <systemd/sd-daemon.h>
+#endif
+
+#if SDL2_SUPPORT
+#include <SDL.h>
 #endif
 
 void print_usage(void);
@@ -48,7 +55,7 @@ int option_help = 0;		/* set to 1 if "-o help" is specified */
 
 
 /* Process a command line option -o setting=value, for example: -o synth.polyhony=16 */
-void process_o_cmd_line_option(fluid_settings_t *settings, char *optarg)
+int process_o_cmd_line_option(fluid_settings_t *settings, char *optarg)
 {
     char *val;
     int hints;
@@ -67,13 +74,13 @@ void process_o_cmd_line_option(fluid_settings_t *settings, char *optarg)
     if(FLUID_STRCMP(optarg, "help") == 0)
     {
         option_help = 1;
-        return;
+        return FLUID_OK;
     }
 
     if(FLUID_STRCMP(optarg, "") == 0)
     {
         fprintf(stderr, "Invalid -o option (name part is empty)\n");
-        return;
+        return FLUID_FAILED;
     }
 
     switch(fluid_settings_get_type(settings, optarg))
@@ -82,7 +89,7 @@ void process_o_cmd_line_option(fluid_settings_t *settings, char *optarg)
         if(fluid_settings_setnum(settings, optarg, atof(val)) != FLUID_OK)
         {
             fprintf(stderr, "Failed to set floating point parameter '%s'\n", optarg);
-            exit(1);
+            return FLUID_FAILED;
         }
 
         break;
@@ -110,7 +117,7 @@ void process_o_cmd_line_option(fluid_settings_t *settings, char *optarg)
         if(fluid_settings_setint(settings, optarg, ival) != FLUID_OK)
         {
             fprintf(stderr, "Failed to set integer parameter '%s'\n", optarg);
-            exit(1);
+            return FLUID_FAILED;
         }
 
         break;
@@ -119,15 +126,17 @@ void process_o_cmd_line_option(fluid_settings_t *settings, char *optarg)
         if(fluid_settings_setstr(settings, optarg, val) != FLUID_OK)
         {
             fprintf(stderr, "Failed to set string parameter '%s'\n", optarg);
-            exit(1);
+            return FLUID_FAILED;
         }
 
         break;
 
     default:
         fprintf(stderr, "Setting parameter '%s' not found\n", optarg);
-        exit(1);
+        return FLUID_FAILED;
     }
+
+    return FLUID_OK;
 }
 
 static void
@@ -293,6 +302,23 @@ fast_render_loop(fluid_settings_t *settings, fluid_synth_t *synth, fluid_player_
     delete_fluid_file_renderer(renderer);
 }
 
+static int is_dls(const char *fname)
+{
+#ifdef LIBINSTPATCH_SUPPORT
+    IpatchFileHandle *fhandle = ipatch_file_identify_open(fname, NULL);
+    int ret = (fhandle != NULL);
+
+    if(ret)
+    {
+        ipatch_file_close(fhandle);
+    }
+
+    return ret;
+#else
+    return FALSE;
+#endif
+}
+
 /*
  * main
  * Process initialization steps in the following order:
@@ -317,14 +343,15 @@ fast_render_loop(fluid_settings_t *settings, fluid_synth_t *synth, fluid_player_
 int main(int argc, char **argv)
 {
     fluid_settings_t *settings;
+    int result = -1;
     int arg1 = 1;
     char buf[512];
     int c, i;
     int interactive = 1;
+    int quiet = 0;
     int midi_in = 1;
     fluid_player_t *player = NULL;
     fluid_midi_router_t *router = NULL;
-    //fluid_sequencer_t* sequencer = NULL;
     fluid_midi_driver_t *mdriver = NULL;
     fluid_audio_driver_t *adriver = NULL;
     fluid_synth_t *synth = NULL;
@@ -337,7 +364,7 @@ int main(int argc, char **argv)
     int audio_channels = 0;
     int dump = 0;
     int fast_render = 0;
-    static const char optchars[] = "a:C:c:dE:f:F:G:g:hijK:L:lm:nO:o:p:R:r:sT:Vvz:";
+    static const char optchars[] = "a:C:c:dE:f:F:G:g:hijK:L:lm:nO:o:p:qR:r:sT:Vvz:";
 #ifdef LASH_ENABLED
     int connect_lash = 1;
     int enabled_lash = 0;		/* set to TRUE if lash gets enabled */
@@ -346,7 +373,19 @@ int main(int argc, char **argv)
     lash_args = fluid_lash_extract_args(&argc, &argv);
 #endif
 
-    print_welcome();
+#if SDL2_SUPPORT
+
+    if(SDL_Init(SDL_INIT_AUDIO) != 0)
+    {
+        fprintf(stderr, "Warning: Unable to initialize SDL2 Audio: %s", SDL_GetError());
+    }
+    else
+    {
+        atexit(SDL_Quit);
+    }
+
+#endif
+
 
     /* create the settings */
     settings = new_fluid_settings();
@@ -383,6 +422,7 @@ int main(int argc, char **argv)
             {"no-shell", 0, 0, 'i'},
             {"option", 1, 0, 'o'},
             {"portname", 1, 0, 'p'},
+            {"quiet", 0, 0, 'q'},
             {"reverb", 1, 0, 'R'},
             {"sample-rate", 1, 0, 'r'},
             {"server", 0, 0, 's'},
@@ -420,7 +460,7 @@ int main(int argc, char **argv)
             {
                 printf("Option -%c requires an argument\n", c);
                 print_usage();
-                exit(0);
+                goto cleanup;
             }
             else
             {
@@ -430,7 +470,7 @@ int main(int argc, char **argv)
                 {
                     printf("Expected argument to option -%c found switch instead\n", c);
                     print_usage();
-                    exit(0);
+                    goto cleanup;
                 }
             }
         }
@@ -462,7 +502,8 @@ int main(int argc, char **argv)
             {
                 printf("-a options (audio driver):\n   ");
                 show_settings_str_options(settings, "audio.driver");
-                exit(0);
+                result = 0;
+                goto cleanup;
             }
             else
             {
@@ -504,7 +545,8 @@ int main(int argc, char **argv)
                 printf("\nNOTE: No libsndfile support!\n"
                        "cpu: Use CPU native byte order\n");
 #endif
-                exit(0);
+                result = 0;
+                goto cleanup;
             }
             else
             {
@@ -531,7 +573,10 @@ int main(int argc, char **argv)
             break;
 
         case 'h':
+            print_welcome();
             print_help(settings);
+            result = 0;
+            goto cleanup;
             break;
 
         case 'i':
@@ -562,7 +607,8 @@ int main(int argc, char **argv)
             {
                 printf("-m options (MIDI driver):\n   ");
                 show_settings_str_options(settings, "midi.driver");
-                exit(0);
+                result = 0;
+                goto cleanup;
             }
             else
             {
@@ -588,7 +634,8 @@ int main(int argc, char **argv)
 #else
                 printf("\nNOTE: No libsndfile support!\n");
 #endif
-                exit(0);
+                result = 0;
+                goto cleanup;
             }
             else
             {
@@ -598,11 +645,27 @@ int main(int argc, char **argv)
             break;
 
         case 'o':
-            process_o_cmd_line_option(settings, optarg);
+            if(process_o_cmd_line_option(settings, optarg) != FLUID_OK)
+            {
+                goto cleanup;
+            }
             break;
 
         case 'p' :
             fluid_settings_setstr(settings, "midi.portname", optarg);
+            break;
+
+        case 'q':
+            quiet = 1;
+
+#if defined(WIN32)
+            /* Windows logs to stdout by default, so make sure anything
+             * lower than PANIC is not printed either */
+            fluid_set_log_function(FLUID_ERR, NULL, NULL);
+            fluid_set_log_function(FLUID_WARN, NULL, NULL);
+            fluid_set_log_function(FLUID_INFO, NULL, NULL);
+            fluid_set_log_function(FLUID_DBG, NULL, NULL);
+#endif
             break;
 
         case 'R':
@@ -640,7 +703,8 @@ int main(int argc, char **argv)
 #else
                 printf("\nNOTE: No libsndfile support!\n");
 #endif
-                exit(0);
+                result = 0;
+                goto cleanup;
             }
             else
             {
@@ -650,8 +714,10 @@ int main(int argc, char **argv)
             break;
 
         case 'V':
+            print_welcome();
             print_configure();
-            exit(0);
+            result = 0;
+            goto cleanup;
             break;
 
         case 'v':
@@ -666,7 +732,7 @@ int main(int argc, char **argv)
         case '?':
             printf("Unknown option %c\n", optopt);
             print_usage();
-            exit(0);
+            goto cleanup;
             break;
 
         default:
@@ -677,7 +743,7 @@ int main(int argc, char **argv)
         default:
             printf("Unknown switch '%c'\n", c);
             print_usage();
-            exit(0);
+            goto cleanup;
             break;
 #endif
         }	/* end of switch statement */
@@ -689,12 +755,17 @@ int main(int argc, char **argv)
     arg1 = i;
 #endif
 
+    if (!quiet) {
+        print_welcome();
+    }
+
     /* option help requested?  "-o help" */
     if(option_help)
     {
         printf("FluidSynth settings:\n");
         fluid_settings_foreach(settings, settings, settings_foreach_func);
-        exit(0);
+        result = 0;
+        goto cleanup;
     }
 
 #ifdef WIN32
@@ -744,13 +815,13 @@ int main(int argc, char **argv)
     if(synth == NULL)
     {
         fprintf(stderr, "Failed to create the synthesizer\n");
-        exit(-1);
+        goto cleanup;
     }
 
     /* load the soundfonts (check that all non options are SoundFont or MIDI files) */
     for(i = arg1; i < argc; i++)
     {
-        if(fluid_is_soundfont(argv[i]))
+        if(fluid_is_soundfont(argv[i]) || is_dls(argv[i]))
         {
             if(fluid_synth_sfload(synth, argv[i], 1) == -1)
             {
@@ -760,18 +831,6 @@ int main(int argc, char **argv)
         else if(!fluid_is_midifile(argv[i]))
         {
             fprintf(stderr, "Parameter '%s' not a SoundFont or MIDI file or error occurred identifying it.\n", argv[i]);
-        }
-    }
-
-    /* start the synthesis thread */
-    if(!fast_render)
-    {
-        adriver = new_fluid_audio_driver(settings, synth);
-
-        if(adriver == NULL)
-        {
-            fprintf(stderr, "Failed to create the audio driver\n");
-            goto cleanup;
         }
     }
 
@@ -793,7 +852,6 @@ int main(int argc, char **argv)
         /* In dump mode, text output is generated for events going into and out of the router.
          * The example dump functions are put into the chain before and after the router..
          */
-        //sequencer = new_fluid_sequencer2(0);
         mdriver = new_fluid_midi_driver(
                       settings,
                       dump ? fluid_midi_dump_prerouter : fluid_midi_router_handle_midi_event,
@@ -812,7 +870,6 @@ int main(int argc, char **argv)
     {
         if((argv[i][0] != '-') && fluid_is_midifile(argv[i]))
         {
-
             if(player == NULL)
             {
                 player = new_fluid_player(synth);
@@ -895,11 +952,13 @@ int main(int argc, char **argv)
             fprintf(stderr, "Failed to create the server.\n"
                     "Continuing without it.\n");
         }
+
 #ifdef SYSTEMD_SUPPORT
         else
         {
             sd_notify(0, "READY=1");
         }
+
 #endif
     }
 
@@ -914,21 +973,6 @@ int main(int argc, char **argv)
 
 #endif
 
-    /* run the shell */
-    if(interactive)
-    {
-        printf("Type 'help' for help topics.\n\n");
-
-        /* In dump mode we set the prompt to "". The UI cannot easily
-         * handle lines, which don't end with CR.  Changing the prompt
-         * cannot be done through a command, because the current shell
-         * does not handle empty arguments.  The ordinary case is dump ==
-         * 0.
-         */
-        fluid_settings_setstr(settings, "shell.prompt", dump ? "" : "> ");
-        fluid_usershell(settings, cmd_handler); /* this is a synchronous shell */
-    }
-
     /* fast rendering audio file, if requested */
     if(fast_render)
     {
@@ -941,7 +985,9 @@ int main(int argc, char **argv)
         }
 
         fluid_settings_dupstr(settings, "audio.file.name", &filename);
-        printf("Rendering audio to file '%s'..\n", filename);
+        if (!quiet) {
+            printf("Rendering audio to file '%s'..\n", filename);
+        }
 
         if(filename)
         {
@@ -950,6 +996,33 @@ int main(int argc, char **argv)
 
         fast_render_loop(settings, synth, player);
     }
+    else /* start the synthesis thread */
+    {
+        adriver = new_fluid_audio_driver(settings, synth);
+
+        if(adriver == NULL)
+        {
+            fprintf(stderr, "Failed to create the audio driver\n");
+            goto cleanup;
+        }
+
+        /* run the shell */
+        if(interactive)
+        {
+            printf("Type 'help' for help topics.\n\n");
+
+            /* In dump mode we set the prompt to "". The UI cannot easily
+            * handle lines, which don't end with CR.  Changing the prompt
+            * cannot be done through a command, because the current shell
+            * does not handle empty arguments.  The ordinary case is dump ==
+            * 0.
+            */
+            fluid_settings_setstr(settings, "shell.prompt", dump ? "" : "> ");
+            fluid_usershell(settings, cmd_handler); /* this is a synchronous shell */
+        }
+    }
+
+    result = 0;
 
 cleanup:
 
@@ -989,40 +1062,16 @@ cleanup:
             /* if no audio driver and sample timers are used, nothing makes the player advance */
             fluid_player_join(player);
         }
-
-        delete_fluid_player(player);
     }
 
-    if(mdriver)
-    {
-        delete_fluid_midi_driver(mdriver);
-    }
+    delete_fluid_audio_driver(adriver);
+    delete_fluid_player(player);
+    delete_fluid_midi_driver(mdriver);
+    delete_fluid_midi_router(router);
+    delete_fluid_synth(synth);
+    delete_fluid_settings(settings);
 
-    if(router)
-    {
-        delete_fluid_midi_router(router);
-    }
-
-    /*if (sequencer) {
-      delete_fluid_sequencer(sequencer);
-    }*/
-
-    if(adriver)
-    {
-        delete_fluid_audio_driver(adriver);
-    }
-
-    if(synth)
-    {
-        delete_fluid_synth(synth);
-    }
-
-    if(settings)
-    {
-        delete_fluid_settings(settings);
-    }
-
-    return 0;
+    return result;
 }
 
 /*
@@ -1033,7 +1082,6 @@ print_usage()
 {
     fprintf(stderr, "Usage: fluidsynth [options] [soundfonts]\n");
     fprintf(stderr, "Try -h for help.\n");
-    exit(0);
 }
 
 void
@@ -1117,6 +1165,9 @@ print_help(fluid_settings_t *settings)
            "    Audio file format for fast rendering or aufile driver (\"help\" for list)\n");
     printf(" -p, --portname=[label]\n"
            "    Set MIDI port name (alsa_seq, coremidi drivers)\n");
+    printf(" -q, --quiet\n"
+           "    Do not print welcome message or other informational output\n"
+           "    (Windows only: also suppress all log messages lower than PANIC\n");
     printf(" -r, --sample-rate\n"
            "    Set the sample rate\n");
     printf(" -R, --reverb\n"
@@ -1141,8 +1192,4 @@ print_help(fluid_settings_t *settings)
     {
         FLUID_FREE(midi_options);
     }
-
-    delete_fluid_settings(settings);
-
-    exit(0);
 }

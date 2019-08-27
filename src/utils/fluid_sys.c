@@ -349,22 +349,6 @@ fluid_utime(void)
 #endif
 }
 
-int
-fluid_file_test(const char* path, int test)
-{
-	fluid_stat_buf_t statbuf;
-	int ret=stat(path, &statbuf);
-	switch(test)
-	{
-		case FLUID_FILE_TEST_EXISTS:
-			return ret==0;
-		case FLUID_FILE_TEST_IS_REGULAR:
-			return ret==0 && ((statbuf.st_mode & S_IFMT) == S_IFREG);
-		default:
-			return 0;
-	}
-}
-
 #if defined(WIN32)      /* Windoze specific stuff */
 
 void
@@ -1234,6 +1218,9 @@ fluid_istream_gets(fluid_istream_t in, char *buf, int len)
         /* Handle read differently depending on if its a socket or file descriptor */
         if(!(in & FLUID_SOCKET_FLAG))
         {
+            // usually read() is supposed to return '\n' as last valid character of the user input
+            // when compiled with compatibility for WinXP however, read() may return 0 (EOF) rather than '\n'
+            // this would cause the shell to exit early
             n = read(in, &c, 1);
 
             if(n == -1)
@@ -1257,7 +1244,8 @@ fluid_istream_gets(fluid_istream_t in, char *buf, int len)
         if(n == 0)
         {
             *buf = 0;
-            return 0;
+            // return 1 if read from stdin, else 0, to fix early exit of shell
+            return (in == STDIN_FILENO);
         }
 
         if(c == '\n')
@@ -1581,3 +1569,33 @@ void delete_fluid_server_socket(fluid_server_socket_t *server_socket)
 }
 
 #endif // NETWORK_SUPPORT
+
+FILE* fluid_file_open(const char* path, const char** errMsg)
+{
+    static const char ErrExist[] = "File does not exist.";
+    static const char ErrRegular[] = "File is not regular, refusing to open it.";
+    static const char ErrNull[] = "File does not exists or insufficient permissions to open it.";
+    
+    FILE* handle = NULL;
+	
+	fluid_stat_buf_t statbuf;
+	int ret = stat(path, &statbuf);
+	if (ret != 0)
+	{
+		*errMsg = ErrExist;
+	}
+	else if ((statbuf.st_mode & S_IFMT) != S_IFREG)
+	{
+		*errMsg = ErrRegular;
+		return NULL;
+	}
+    else if((handle = FLUID_FOPEN(path, "rb")) == NULL)
+    {
+        if(errMsg != NULL)
+        {
+            *errMsg = ErrNull;
+        }
+    }
+    
+    return handle;
+}

@@ -80,6 +80,26 @@ static const fluid_audriver_definition_t fluid_audio_drivers[] =
     },
 #endif
 
+#if OBOE_SUPPORT
+    {
+        "oboe",
+        new_fluid_oboe_audio_driver,
+        NULL,
+        delete_fluid_oboe_audio_driver,
+        fluid_oboe_audio_driver_settings
+    },
+#endif
+
+#if OPENSLES_SUPPORT
+    {
+        "opensles",
+        new_fluid_opensles_audio_driver,
+        NULL,
+        delete_fluid_opensles_audio_driver,
+        fluid_opensles_audio_driver_settings
+    },
+#endif
+
 #if COREAUDIO_SUPPORT
     {
         "coreaudio",
@@ -273,8 +293,14 @@ find_fluid_audio_driver(fluid_settings_t *settings)
  * @param synth Synthesizer instance for which the audio driver is created for.
  * @return The new audio driver instance.
  *
- * Creates a new audio driver for a given 'synth' instance with a defined set
- * of configuration 'settings'.
+ * Creates a new audio driver for a given \p synth instance with a defined set
+ * of configuration \p settings.
+ *
+ * @note As soon as an audio driver is created, the \p synth starts rendering audio.
+ * This means that all necessary sound-setup should be completed after this point,
+ * thus of all object types in use (synth, midi player, sequencer, etc.) the audio
+ * driver should always be the last one to be created and the first one to be deleted!
+ * Also refer to the order of object creation in the code examples.
  */
 fluid_audio_driver_t *
 new_fluid_audio_driver(fluid_settings_t *settings, fluid_synth_t *synth)
@@ -306,9 +332,15 @@ new_fluid_audio_driver(fluid_settings_t *settings, fluid_synth_t *synth)
  *
  * Like new_fluid_audio_driver() but allows for custom audio processing before
  * audio is sent to audio driver.  It is the responsibility of the callback
- * 'func' to render the audio into the buffers.
+ * \p func to render the audio into the buffers.
  *
- * NOTE: Not as efficient as new_fluid_audio_driver().
+ * @note Not as efficient as new_fluid_audio_driver().
+ *
+ * @note As soon as an audio driver is created, the \p synth starts rendering audio.
+ * This means that all necessary sound-setup should be completed after this point,
+ * thus of all object types in use (synth, midi player, sequencer, etc.) the audio
+ * driver should always be the last one to be created and the first one to be deleted!
+ * Also refer to the order of object creation in the code examples.
  */
 fluid_audio_driver_t *
 new_fluid_audio_driver2(fluid_settings_t *settings, fluid_audio_func_t func, void *data)

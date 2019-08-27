@@ -102,7 +102,7 @@ static const fluid_cmd_t fluid_commands[] =
     },
     {
         "pitch_bend_range", "event", fluid_handle_pitch_bend_range,
-        "pitch_bend chan range      Sets bend pitch range"
+        "pitch_bend_range chn range Sets pitch bend range for the given midi channel"
     },
     {
         "cc", "event", fluid_handle_cc,
@@ -572,6 +572,7 @@ fluid_shell_run(void *data)
 
         if(n < 0)
         {
+            FLUID_LOG(FLUID_PANIC, "An error occurred while reading from stdin.");
             break;
         }
 
@@ -595,14 +596,12 @@ fluid_shell_run(void *data)
 
         if(n == 0)
         {
+            FLUID_LOG(FLUID_INFO, "Received EOF while reading commands, exiting the shell.");
             break;
         }
     }
 
-    if(prompt)
-    {
-        FLUID_FREE(prompt);    /* -- free prompt */
-    }
+    FLUID_FREE(prompt);    /* -- free prompt */
 
     /* return FLUID_THREAD_RETURN_VALUE on success, something else on failure */
     return errors ? (fluid_thread_return_t)(-1) : FLUID_THREAD_RETURN_VALUE;
@@ -2519,9 +2518,11 @@ int fluid_handle_router_par2(void *data, int ac, char **av, fluid_ostream_t out)
 
 /**  commands Poly/mono mode *************************************************/
 
-static const char *mode_name[] = {"poly omni on (0)", "mono omni on (1)",
-                                  "poly omni off(2)", "mono omni off(3)"
-                                 };
+static const char *const mode_name[] = {
+    "poly omni on (0)", "mono omni on (1)",
+    "poly omni off(2)", "mono omni off(3)"
+};
+
 /*
   Prints result message for commands: basicchannels, resetbasicchannels.
   Prints all basic channels and print a warning if there is no basic channel.
@@ -2595,7 +2596,7 @@ static int get_channel_mode_num(char *name)
 {
     /* argument names for channel mode parameter (see resetbasicchannels and
        setbasicchannels commands*/
-    static const char *name_channel_mode [FLUID_CHANNEL_MODE_LAST] =
+    static const char * const name_channel_mode [FLUID_CHANNEL_MODE_LAST] =
     {"poly_omnion", "mono_omnion", "poly_omnioff", "mono_omnioff"};
     int i;
 
@@ -2610,7 +2611,7 @@ static int get_channel_mode_num(char *name)
     return -1;
 }
 
-static const char *invalid_arg_msg = "invalid argument\n";
+static const char invalid_arg_msg[] = "invalid argument\n";
 /*
  checks basic channels arguments: chan1 mode1 val  chan2 mode2 val2  ...
  All arguments can be numeric. mode parameter can be a name.
@@ -2625,7 +2626,7 @@ static const char *invalid_arg_msg = "invalid argument\n";
 static int check_basicchannels_arguments(int ac, char **av,
         fluid_ostream_t out, char const *name_cde)
 {
-    static const char *too_few_arg_msg = "too few argument, chan mode val [chan mode val]...\n";
+    static const char too_few_arg_msg[] = "too few argument, chan mode val [chan mode val]...\n";
     int i;
 
     for(i = 0; i < ac; i++)
@@ -2692,7 +2693,7 @@ static int check_channels_arguments(int ac, char **av,
 int fluid_handle_resetbasicchannels(void *data, int ac, char **av,
                                     fluid_ostream_t out)
 {
-    static const char *name_cde = "resetbasicchannels";
+    static const char name_cde[] = "resetbasicchannels";
     FLUID_ENTRY_COMMAND(data);
     fluid_synth_t *synth = handler->synth;
 
@@ -2748,7 +2749,7 @@ int fluid_handle_resetbasicchannels(void *data, int ac, char **av,
 int fluid_handle_setbasicchannels(void *data, int ac, char **av,
                                   fluid_ostream_t out)
 {
-    static const char *name_cde = "setbasicchannels";
+    static const char name_cde[] = "setbasicchannels";
     FLUID_ENTRY_COMMAND(data);
     fluid_synth_t *synth = handler->synth;
     int result;
@@ -2848,9 +2849,9 @@ static void print_channel_is_outside_count(fluid_ostream_t out, char const *name
 int fluid_handle_channelsmode(void *data, int ac, char **av,
                               fluid_ostream_t out)
 {
-    static const char *header =
+    static const char header[] =
         "Channel    , Status , Type         , Mode            , Nbr of channels\n";
-    static const char *name_cde = "channelsmode";
+    static const char name_cde[] = "channelsmode";
     FLUID_ENTRY_COMMAND(data);
     fluid_synth_t *synth = handler->synth;
 
@@ -2888,7 +2889,7 @@ int fluid_handle_channelsmode(void *data, int ac, char **av,
                 const char *p_basicchan;  /* field basic channel */
                 const char *p_mode;  /* field mode */
                 const char *p_nbr; /* field Nbr */
-                static const char *blank = "--"; /* field empty */
+                static const char blank[] = "--"; /* field empty */
 
                 if(chan == basic_chan)
                 {
@@ -2982,8 +2983,8 @@ static void print_result_get_channel_mode(int result, fluid_ostream_t out,
 int fluid_handle_legatomode(void *data, int ac, char **av,
                             fluid_ostream_t out)
 {
-    static const char *name_cde = "legatomode";
-    static const char *name_legato_mode[FLUID_CHANNEL_LEGATO_MODE_LAST] =
+    static const char name_cde[] = "legatomode";
+    static const char *const name_legato_mode[FLUID_CHANNEL_LEGATO_MODE_LAST] =
     {	"(0)retrigger", "(1)multi-retrigger"	};
 
     FLUID_ENTRY_COMMAND(data);
@@ -3084,7 +3085,7 @@ static void print_result_set_channel_mode(int result, fluid_ostream_t out,
     }
 }
 
-static const char *too_few_arg_chan_mode_msg = "too few argument, chan mode [chan mode]...\n";
+static const char too_few_arg_chan_mode_msg[] = "too few argument, chan mode [chan mode]...\n";
 /*-----------------------------------------------------------------------------
   setlegatomode chan0 mode1 [chan1 mode0] ..  ..
 
@@ -3093,7 +3094,7 @@ static const char *too_few_arg_chan_mode_msg = "too few argument, chan mode [cha
 int fluid_handle_setlegatomode(void *data, int ac, char **av,
                                fluid_ostream_t out)
 {
-    static const char *name_cde = "setlegatomode";
+    static const char name_cde[] = "setlegatomode";
     FLUID_ENTRY_COMMAND(data);
     fluid_synth_t *synth = handler->synth;
     int i, n ;
@@ -3138,8 +3139,8 @@ int fluid_handle_setlegatomode(void *data, int ac, char **av,
 int fluid_handle_portamentomode(void *data, int ac, char **av,
                                 fluid_ostream_t out)
 {
-    static const char *name_cde = "portamentomode";
-    static const char *name_portamento_mode[FLUID_CHANNEL_PORTAMENTO_MODE_LAST] =
+    static const char name_cde[] = "portamentomode";
+    static const char *const name_portamento_mode[FLUID_CHANNEL_PORTAMENTO_MODE_LAST] =
     { "(0)each note", "(1)legato only", "(2)staccato only"	};
 
     FLUID_ENTRY_COMMAND(data);
@@ -3183,7 +3184,7 @@ int fluid_handle_portamentomode(void *data, int ac, char **av,
 int fluid_handle_setportamentomode(void *data, int ac, char **av,
                                    fluid_ostream_t out)
 {
-    static const char *name_cde = "setportamentomode";
+    static const char name_cde[] = "setportamentomode";
     FLUID_ENTRY_COMMAND(data);
     fluid_synth_t *synth = handler->synth;
     int i, n ;
@@ -3229,8 +3230,8 @@ int fluid_handle_setportamentomode(void *data, int ac, char **av,
 int fluid_handle_breathmode(void *data, int ac, char **av,
                             fluid_ostream_t out)
 {
-    static const char *name_cde = "breathmode";
-    static const char *header = "Channel    , poly breath , mono breath , breath sync\n";
+    static const char name_cde[] = "breathmode";
+    static const char *const header = "Channel    , poly breath , mono breath , breath sync\n";
     FLUID_ENTRY_COMMAND(data);
     fluid_synth_t *synth = handler->synth;
     int breathmode;
@@ -3261,8 +3262,8 @@ int fluid_handle_breathmode(void *data, int ac, char **av,
 
         if(result == FLUID_OK)
         {
-            static const char *on_msg = "on";
-            static const char *off_msg = "off";
+            static const char on_msg[] = "on";
+            static const char off_msg[] = "off";
             const char *msg_poly_breath, * msg_mono_breath, * msg_breath_sync;
 
             if(breathmode &  FLUID_CHANNEL_BREATH_POLY)
@@ -3325,8 +3326,8 @@ int fluid_handle_breathmode(void *data, int ac, char **av,
 int fluid_handle_setbreathmode(void *data, int ac, char **av,
                                fluid_ostream_t out)
 {
-    static const char *name_cde = "setbreathmode";
-    static const char *too_few_arg_breath_msg =
+    static const char name_cde[] = "setbreathmode";
+    static const char too_few_arg_breath_msg[] =
         "too few argument:\nchan 1/0(breath poly) 1/0(breath mono) 1/0(breath sync mono)[..]\n";
 
     FLUID_ENTRY_COMMAND(data);
