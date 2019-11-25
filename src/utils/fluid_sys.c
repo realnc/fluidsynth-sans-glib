@@ -213,6 +213,40 @@ fluid_log(int level, const char *fmt, ...)
     return FLUID_FAILED;
 }
 
+void* fluid_alloc(size_t len)
+{
+    void* ptr = malloc(len);
+
+#if defined(DEBUG) && !defined(_MSC_VER)
+    // garbage initialize allocated memory for debug builds to ease reproducing
+    // bugs like 44453ff23281b3318abbe432fda90888c373022b .
+    //
+    // MSVC++ already garbage initializes allocated memory by itself (debug-heap).
+    //
+    // 0xCC because
+    // * it makes pointers reliably crash when dereferencing them,
+    // * floating points are still some valid but insanely huge negative number, and
+    // * if for whatever reason this allocated memory is executed, it'll trigger
+    //   INT3 (...at least on x86)
+    if(ptr != NULL)
+    {
+        memset(ptr, 0xCC, len);
+    }
+#endif
+    return ptr;
+}
+
+/**
+ * Convenience wrapper for free() that satisfies at least C90 requirements.
+ * Especially useful when using fluidsynth with programming languages that do not provide malloc() and free().
+ * @note Only use this function when the API documentation explicitly says so. Otherwise use adequate \c delete_fluid_* functions.
+ * @since 2.0.7
+ */
+void fluid_free(void* ptr)
+{
+    free(ptr);
+}
+
 /**
  * An improved strtok, still trashes the input string, but is portable and
  * thread safe.  Also skips token chars at beginning of token string and never
@@ -300,28 +334,21 @@ void fluid_msleep(unsigned int msecs)
 
 /**
  * Get time in milliseconds to be used in relative timing operations.
- * @return Unix time in milliseconds.
+ * @return Monotonic time in milliseconds.
  */
 unsigned int fluid_curtime(void)
 {
-#ifdef WIN32
-	long long f,t;
-	QueryPerformanceFrequency(&f);
-	QueryPerformanceCounter(&t);
-	return t*1000/f;
-#else
-	static long initial_seconds = 0;
-	struct timespec timeval;
+    float now;
+    static float initial_time = 0;
 
-	if (initial_seconds == 0) {
-		timespec_get (&timeval, TIME_UTC);
-		initial_seconds = timeval.tv_sec;
-	}
+    if(initial_time == 0)
+    {
+        initial_time = (float)fluid_utime();
+    }
 
-	timespec_get (&timeval, TIME_UTC);
+    now = (float)fluid_utime();
 
-	return (unsigned int)((timeval.tv_sec - initial_seconds) * 1000.0 + timeval.tv_nsec / 1000000.0);
-#endif
+    return (unsigned int)((now - initial_time) / 1000.0f);
 }
 
 /**
@@ -1415,7 +1442,7 @@ static fluid_thread_return_t fluid_server_socket_run(void *data)
         {
             if(server_socket->cont)
             {
-                FLUID_LOG(FLUID_ERR, "Failed to accept connection: %ld", fluid_socket_get_error());
+                FLUID_LOG(FLUID_ERR, "Failed to accept connection: %d", fluid_socket_get_error());
             }
 
             server_socket->cont = 0;
@@ -1474,7 +1501,7 @@ new_fluid_server_socket(int port, fluid_server_func_t func, void *data)
 
     if(sock == INVALID_SOCKET)
     {
-        FLUID_LOG(FLUID_ERR, "Failed to create server socket: %ld", fluid_socket_get_error());
+        FLUID_LOG(FLUID_ERR, "Failed to create server socket: %d", fluid_socket_get_error());
         fluid_socket_cleanup();
         return NULL;
     }
@@ -1489,7 +1516,7 @@ new_fluid_server_socket(int port, fluid_server_func_t func, void *data)
 
     if(sock == INVALID_SOCKET)
     {
-        FLUID_LOG(FLUID_ERR, "Failed to create server socket: %ld", fluid_socket_get_error());
+        FLUID_LOG(FLUID_ERR, "Failed to create server socket: %d", fluid_socket_get_error());
         fluid_socket_cleanup();
         return NULL;
     }
@@ -1502,7 +1529,7 @@ new_fluid_server_socket(int port, fluid_server_func_t func, void *data)
 
     if(bind(sock, (const struct sockaddr *) &addr, sizeof(addr)) == SOCKET_ERROR)
     {
-        FLUID_LOG(FLUID_ERR, "Failed to bind server socket: %ld", fluid_socket_get_error());
+        FLUID_LOG(FLUID_ERR, "Failed to bind server socket: %d", fluid_socket_get_error());
         fluid_socket_close(sock);
         fluid_socket_cleanup();
         return NULL;
@@ -1510,7 +1537,7 @@ new_fluid_server_socket(int port, fluid_server_func_t func, void *data)
 
     if(listen(sock, SOMAXCONN) == SOCKET_ERROR)
     {
-        FLUID_LOG(FLUID_ERR, "Failed to listen on server socket: %ld", fluid_socket_get_error());
+        FLUID_LOG(FLUID_ERR, "Failed to listen on server socket: %d", fluid_socket_get_error());
         fluid_socket_close(sock);
         fluid_socket_cleanup();
         return NULL;

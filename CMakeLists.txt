@@ -28,8 +28,8 @@ set ( PACKAGE "fluidsynth" )
 
 # FluidSynth package version
 set ( FLUIDSYNTH_VERSION_MAJOR 2 )
-set ( FLUIDSYNTH_VERSION_MINOR 0 )
-set ( FLUIDSYNTH_VERSION_MICRO 6 )
+set ( FLUIDSYNTH_VERSION_MINOR 1 )
+set ( FLUIDSYNTH_VERSION_MICRO 0 )
 set ( VERSION "${FLUIDSYNTH_VERSION_MAJOR}.${FLUIDSYNTH_VERSION_MINOR}.${FLUIDSYNTH_VERSION_MICRO}" )
 set ( FLUIDSYNTH_VERSION "\"${VERSION}\"" )
 
@@ -43,8 +43,8 @@ set ( FLUIDSYNTH_VERSION "\"${VERSION}\"" )
 # if any interfaces have been removed/changed (compatibility broken): AGE=0
 # This is not exactly the same algorithm as the libtool one, but the results are the same.
 set ( LIB_VERSION_CURRENT 2 )
-set ( LIB_VERSION_AGE 1 )
-set ( LIB_VERSION_REVISION 3 )
+set ( LIB_VERSION_AGE 3 )
+set ( LIB_VERSION_REVISION 0 )
 set ( LIB_VERSION_INFO
       "${LIB_VERSION_CURRENT}.${LIB_VERSION_AGE}.${LIB_VERSION_REVISION}" )
 
@@ -148,12 +148,10 @@ check_include_file ( time.h HAVE_TIME_H )
 check_include_file ( errno.h HAVE_ERRNO_H )
 check_include_file ( stdarg.h HAVE_STDARG_H )
 check_include_file ( unistd.h HAVE_UNISTD_H )
-check_include_file ( memory.h HAVE_MEMORY_H )
 check_include_file ( sys/mman.h HAVE_SYS_MMAN_H )
 check_include_file ( sys/types.h HAVE_SYS_TYPES_H )
 check_include_file ( sys/time.h HAVE_SYS_TIME_H )
 check_include_file ( sys/stat.h HAVE_SYS_STAT_H )
-check_include_file ( sys/ioctl.h HAVE_SYS_IOCTL_H )
 check_include_file ( fcntl.h HAVE_FCNTL_H )
 check_include_file ( sys/socket.h HAVE_SYS_SOCKET_H )
 check_include_file ( netinet/in.h HAVE_NETINET_IN_H )
@@ -176,8 +174,7 @@ unset ( FLUID_CPPFLAGS CACHE )
 unset ( FLUID_LIBS CACHE )
 unset ( ENABLE_UBSAN CACHE )
 
-# Options for the GNU C compiler only
-if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Intel" )
+if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Intel" )
   if ( NOT APPLE AND NOT OS2 )
     set ( CMAKE_EXE_LINKER_FLAGS
           "${CMAKE_EXE_LINKER_FLAGS} -Wl,--as-needed" )
@@ -185,8 +182,7 @@ if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_
           "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--no-undefined" )
   endif ( NOT APPLE AND NOT OS2 )
   
-  # define some warning flags
-  set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -W -Wpointer-arith -Wcast-qual -Wstrict-prototypes -Wno-unused-parameter -Wdeclaration-after-statement" )
+  set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -W -Wpointer-arith -Wcast-qual -Wstrict-prototypes -Wno-unused-parameter -Wdeclaration-after-statement -Werror=implicit-function-declaration" )
   set ( GNUCXX_WARNING_FLAGS "-Wall -W -Wpointer-arith -Wno-cast-qual -Wcast-align -Wno-unused-parameter" )
   set ( CMAKE_C_FLAGS_DEBUG "-D_XOPEN_SOURCE=500 -std=c11 -g -fvisibility=hidden -DDEBUG ${GNUCC_WARNING_FLAGS}" )
   set ( CMAKE_C_FLAGS_RELEASE "-D_XOPEN_SOURCE=500 -std=c11 -O2 -fomit-frame-pointer -funroll-all-loops -finline-functions -fvisibility=hidden -DNDEBUG ${GNUCC_WARNING_FLAGS}" )
@@ -211,7 +207,7 @@ if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_
   else () # not intel
     # gcc and clang support bad function cast and alignment warnings; add them as well.
     set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wbad-function-cast -Wcast-align" )
-    
+
     if ( enable-ubsan )
       set ( CMAKE_C_FLAGS "-fsanitize=address,undefined ${CMAKE_C_FLAGS}" )
       set ( CMAKE_EXE_LINKER_FLAGS "-fsanitize=address,undefined ${CMAKE_EXE_LINKER_FLAGS}" )
@@ -219,7 +215,7 @@ if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_
       set ( ENABLE_UBSAN 1 )
     endif ( enable-ubsan )
   endif (CMAKE_C_COMPILER_ID STREQUAL "Intel" )
-endif ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Intel" )
+endif ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Intel" )
 
 # Windows
 unset ( WINDOWS_LIBS CACHE )
@@ -291,7 +287,6 @@ if ( WIN32 )
 else ( WIN32 )
 # Check PThreads, but not in Windows
   find_package ( Threads REQUIRED )
-  set ( HAVE_LIBPTHREAD ${Threads_FOUND} )
   set ( LIBFLUID_LIBS "m" ${CMAKE_THREAD_LIBS_INIT} )
 endif ( WIN32 )
 
@@ -565,7 +560,7 @@ else(NOT enable-pkgconfig)
 
     unset ( LIBINSTPATCH_SUPPORT CACHE )
     if ( enable-libinstpatch )
-        pkg_check_modules ( LIBINSTPATCH libinstpatch-1.0 )
+        pkg_check_modules ( LIBINSTPATCH libinstpatch-1.0>=1.1.0 )
         set ( LIBINSTPATCH_SUPPORT ${LIBINSTPATCH_FOUND} )
     endif ( enable-libinstpatch )
 
