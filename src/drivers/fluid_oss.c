@@ -541,7 +541,7 @@ fluid_oss_audio_run(void *d)
         if(write(dev->dspfd, buffer, dev->buffer_byte_size) < 0)
         {
             FLUID_LOG(FLUID_ERR, "Error writing to OSS sound device: %s",
-                      g_strerror(errno));
+                      strerror(errno));
             break;
         }
     }
@@ -581,7 +581,7 @@ fluid_oss_audio_run2(void *d)
         if(write(dev->dspfd, buffer, dev->buffer_byte_size) < 0)
         {
             FLUID_LOG(FLUID_ERR, "Error writing to OSS sound device: %s",
-                      g_strerror(errno));
+                      strerror(errno));
             break;
         }
     }
