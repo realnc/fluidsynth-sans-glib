@@ -407,21 +407,27 @@ fluid_istream_t fluid_socket_get_istream(fluid_socket_t sock);
 fluid_ostream_t fluid_socket_get_ostream(fluid_socket_t sock);
 
 /* File access */
-#if defined (__GNUC__) && defined(_WIN64)
+#if defined(WIN32)
 #define fluid_stat(_filename, _statbuf)   _stat64i32((_filename), (_statbuf))
+typedef struct _stat64i32 fluid_stat_buf_t;
 #else
 #define fluid_stat(_filename, _statbuf)   stat((_filename), (_statbuf))
+typedef struct stat fluid_stat_buf_t;
 #endif
-#if defined(WIN32) || HAVE_WINDOWS_H
-    #if defined (_MSC_VER) && !defined(_WIN64)
-        typedef struct _stat32 fluid_stat_buf_t;
-    #else
-        typedef struct _stat fluid_stat_buf_t;
-	#endif
-#else
-    /* posix, OS/2, etc. */
-    typedef struct stat fluid_stat_buf_t;
-#endif
+// #if defined (__GNUC__) && defined(_WIN64)
+// #else
+// #define fluid_stat(_filename, _statbuf)   stat((_filename), (_statbuf))
+// #endif
+// #if defined(WIN32) || HAVE_WINDOWS_H
+//     #if defined (_MSC_VER) && !defined(_WIN64)
+//         typedef struct _stat32 fluid_stat_buf_t;
+//     #else
+//         typedef struct _stat fluid_stat_buf_t;
+// 	#endif
+// #else
+//     /* posix, OS/2, etc. */
+//     typedef struct stat fluid_stat_buf_t;
+// #endif
 
 FILE* fluid_file_open(const char* filename, const char** errMsg);
 fluid_long_long_t fluid_file_tell(FILE* f);
